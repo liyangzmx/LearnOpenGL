@@ -227,6 +227,12 @@ void RenderText(Shader &shader, std::string text, float x, float y, float scale,
     for (c = text.begin(); c != text.end(); c++) 
     {
         Character ch = Characters[*c];
+        // Spaces advance the cursor but have no bitmap to sample.
+        if (ch.Size.x == 0 || ch.Size.y == 0)
+        {
+            x += (ch.Advance >> 6) * scale;
+            continue;
+        }
 
         float xpos = x + ch.Bearing.x * scale;
         float ypos = y - (ch.Size.y - ch.Bearing.y) * scale;

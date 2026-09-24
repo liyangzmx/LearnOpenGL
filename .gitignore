@@ -2,3 +2,8 @@
 bin/
 build/
 out/
+CMakeUserPresets.json
+__pycache__/
+
+# Local Feishu authoring drafts and authorization artifacts
+/draft_*_folder/

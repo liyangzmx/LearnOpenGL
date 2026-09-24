@@ -63,7 +63,9 @@ PostProcessor::PostProcessor(Shader shader, unsigned int width, unsigned int hei
 
 void PostProcessor::BeginRender()
 {
+    glGetIntegerv(GL_VIEWPORT, this->ScreenViewport);
     glBindFramebuffer(GL_FRAMEBUFFER, this->MSFBO);
+    glViewport(0, 0, this->Width, this->Height);
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 }
@@ -74,6 +76,8 @@ void PostProcessor::EndRender()
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, this->FBO);
     glBlitFramebuffer(0, 0, this->Width, this->Height, 0, 0, this->Width, this->Height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
     glBindFramebuffer(GL_FRAMEBUFFER, 0); // binds both READ and WRITE framebuffer to default framebuffer
+    glViewport(this->ScreenViewport[0], this->ScreenViewport[1],
+        this->ScreenViewport[2], this->ScreenViewport[3]);
 }
 
 void PostProcessor::Render(float time)

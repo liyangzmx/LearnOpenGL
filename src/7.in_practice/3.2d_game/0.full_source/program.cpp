@@ -13,6 +13,8 @@
 #include "resource_manager.h"
 
 #include <iostream>
+#include <memory>
+#include <string>
 
 // GLFW function declarations
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
@@ -23,11 +25,13 @@ const unsigned int SCREEN_WIDTH = 800;
 // The height of the screen
 const unsigned int SCREEN_HEIGHT = 600;
 
-Game Breakout(SCREEN_WIDTH, SCREEN_HEIGHT);
+std::unique_ptr<Game> Breakout;
 
 int main(int argc, char *argv[])
 {
-    glfwInit();
+    const bool smokeTest = argc > 1 && std::string(argv[1]) == "--smoke-test";
+    if (!glfwInit())
+        return -1;
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
@@ -37,6 +41,12 @@ int main(int argc, char *argv[])
     glfwWindowHint(GLFW_RESIZABLE, false);
 
     GLFWwindow* window = glfwCreateWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Breakout", nullptr, nullptr);
+    if (!window)
+    {
+        std::cerr << "Failed to create GLFW window\n";
+        glfwTerminate();
+        return -1;
+    }
     glfwMakeContextCurrent(window);
 
     // glad: load all OpenGL function pointers
@@ -52,18 +62,44 @@ int main(int argc, char *argv[])
 
     // OpenGL configuration
     // --------------------
-    glViewport(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+    int framebufferWidth, framebufferHeight;
+    glfwGetFramebufferSize(window, &framebufferWidth, &framebufferHeight);
+    glViewport(0, 0, framebufferWidth, framebufferHeight);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     // initialize game
     // ---------------
-    Breakout.Init();
+    Breakout = std::make_unique<Game>(SCREEN_WIDTH, SCREEN_HEIGHT);
+    Breakout->Init();
+    if (smokeTest)
+    {
+        for (unsigned int level = 0; level < Breakout->Levels.size(); ++level)
+        {
+            Breakout->Level = level;
+            Breakout->ResetLevel();
+            if (Breakout->Levels[level].Bricks.empty())
+            {
+                std::cerr << "Failed to reload level " << level << std::endl;
+                Breakout.reset();
+                ResourceManager::Clear();
+                glfwTerminate();
+                return 1;
+            }
+        }
+        Breakout->Level = 0;
+        Breakout->State = GAME_ACTIVE;
+        Breakout->Keys[GLFW_KEY_SPACE] = true;
+        std::cout << "Smoke test: all four levels reload successfully" << std::endl;
+    }
+    const double startTime = glfwGetTime();
+    bool smokeFailed = false;
+    bool checkedViewport = false;
 
     // deltaTime variables
     // -------------------
     float deltaTime = 0.0f;
-    float lastFrame = 0.0f;
+    float lastFrame = static_cast<float>(glfwGetTime());
 
     while (!glfwWindowShouldClose(window))
     {
@@ -73,30 +109,71 @@ int main(int argc, char *argv[])
         deltaTime = currentFrame - lastFrame;
         lastFrame = currentFrame;
         glfwPollEvents();
+        glfwGetFramebufferSize(window, &framebufferWidth, &framebufferHeight);
+        if (framebufferWidth == 0 || framebufferHeight == 0)
+            continue;
 
         // manage user input
         // -----------------
-        Breakout.ProcessInput(deltaTime);
+        Breakout->ProcessInput(deltaTime);
 
         // update game state
         // -----------------
-        Breakout.Update(deltaTime);
+        Breakout->Update(deltaTime);
 
         // render
         // ------
+        glViewport(0, 0, framebufferWidth, framebufferHeight);
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
-        Breakout.Render();
+        Breakout->Render();
+        if (smokeTest)
+        {
+            if (!checkedViewport)
+            {
+                GLint viewport[4];
+                glGetIntegerv(GL_VIEWPORT, viewport);
+                smokeFailed = viewport[0] != 0 || viewport[1] != 0 ||
+                    viewport[2] != framebufferWidth || viewport[3] != framebufferHeight;
+                // Read the actual back buffer: all four quadrants must contain the scene.
+                glReadBuffer(GL_BACK);
+                glPixelStorei(GL_PACK_ALIGNMENT, 1);
+                for (int y = 1; y <= 3; y += 2)
+                    for (int x = 1; x <= 3; x += 2)
+                    {
+                        unsigned char pixel[3] = {};
+                        glReadPixels(framebufferWidth * x / 4, framebufferHeight * y / 4,
+                            1, 1, GL_RGB, GL_UNSIGNED_BYTE, pixel);
+                        if (pixel[0] == 0 && pixel[1] == 0 && pixel[2] == 0)
+                            smokeFailed = true;
+                    }
+                glPixelStorei(GL_PACK_ALIGNMENT, 4);
+                std::cout << "Framebuffer " << framebufferWidth << 'x' << framebufferHeight
+                    << ": viewport and four-quadrant check " << (smokeFailed ? "FAILED" : "passed") << std::endl;
+                checkedViewport = true;
+            }
+            for (GLenum error = glGetError(); error != GL_NO_ERROR; error = glGetError())
+            {
+                std::cerr << "OpenGL error: " << error << std::endl;
+                smokeFailed = true;
+            }
+            if (smokeFailed)
+                glfwSetWindowShouldClose(window, true);
+        }
 
         glfwSwapBuffers(window);
+        if (smokeTest && glfwGetTime() - startTime >= 6.0)
+            glfwSetWindowShouldClose(window, true);
     }
+
+    Breakout.reset(); // release GPU and audio resources while the context is alive
 
     // delete all resources as loaded using the resource manager
     // ---------------------------------------------------------
     ResourceManager::Clear();
 
     glfwTerminate();
-    return 0;
+    return smokeFailed ? 1 : 0;
 }
 
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mode)
@@ -107,11 +184,11 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
     if (key >= 0 && key < 1024)
     {
         if (action == GLFW_PRESS)
-            Breakout.Keys[key] = true;
+            Breakout->Keys[key] = true;
         else if (action == GLFW_RELEASE)
         {
-            Breakout.Keys[key] = false;
-            Breakout.KeysProcessed[key] = false;
+            Breakout->Keys[key] = false;
+            Breakout->KeysProcessed[key] = false;
         }
     }
 }

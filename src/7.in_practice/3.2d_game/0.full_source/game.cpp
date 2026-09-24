@@ -12,8 +12,7 @@
 
 #include <learnopengl/filesystem.h>
 
-#include <irrklang/irrKlang.h>
-using namespace irrklang;
+#include "audio_engine.h"
 
 #include "game.h"
 #include "resource_manager.h"
@@ -31,7 +30,7 @@ GameObject        *Player;
 BallObject        *Ball;
 ParticleGenerator *Particles;
 PostProcessor     *Effects;
-ISoundEngine      *SoundEngine = createIrrKlangDevice();
+AudioEngine       *SoundEngine;
 TextRenderer      *Text;
 
 float ShakeTime = 0.0f;
@@ -51,11 +50,12 @@ Game::~Game()
     delete Particles;
     delete Effects;
     delete Text;
-    SoundEngine->drop();
+    delete SoundEngine;
 }
 
 void Game::Init()
 {
+    SoundEngine = new AudioEngine();
     // load shaders
     ResourceManager::LoadShader("sprite.vs", "sprite.fs", nullptr, "sprite");
     ResourceManager::LoadShader("particle.vs", "particle.fs", nullptr, "particle");
@@ -248,13 +248,13 @@ void Game::Render()
 void Game::ResetLevel()
 {
     if (this->Level == 0)
-        this->Levels[0].Load("levels/one.lvl", this->Width, this->Height / 2);
+        this->Levels[0].Load(FileSystem::getPath("resources/levels/one.lvl").c_str(), this->Width, this->Height / 2);
     else if (this->Level == 1)
-        this->Levels[1].Load("levels/two.lvl", this->Width, this->Height / 2);
+        this->Levels[1].Load(FileSystem::getPath("resources/levels/two.lvl").c_str(), this->Width, this->Height / 2);
     else if (this->Level == 2)
-        this->Levels[2].Load("levels/three.lvl", this->Width, this->Height / 2);
+        this->Levels[2].Load(FileSystem::getPath("resources/levels/three.lvl").c_str(), this->Width, this->Height / 2);
     else if (this->Level == 3)
-        this->Levels[3].Load("levels/four.lvl", this->Width, this->Height / 2);
+        this->Levels[3].Load(FileSystem::getPath("resources/levels/four.lvl").c_str(), this->Width, this->Height / 2);
 
     this->Lives = 3;
 }

@@ -85,7 +85,7 @@ void TextRenderer::Load(std::string font, unsigned int fontSize)
             texture,
             glm::ivec2(face->glyph->bitmap.width, face->glyph->bitmap.rows),
             glm::ivec2(face->glyph->bitmap_left, face->glyph->bitmap_top),
-            face->glyph->advance.x
+            static_cast<unsigned int>(face->glyph->advance.x)
         };
         Characters.insert(std::pair<char, Character>(c, character));
     }
@@ -108,6 +108,12 @@ void TextRenderer::RenderText(std::string text, float x, float y, float scale, g
     for (c = text.begin(); c != text.end(); c++)
     {
         Character ch = Characters[*c];
+        // Spaces advance the cursor but have no bitmap to sample.
+        if (ch.Size.x == 0 || ch.Size.y == 0)
+        {
+            x += (ch.Advance >> 6) * scale;
+            continue;
+        }
 
         float xpos = x + ch.Bearing.x * scale;
         float ypos = y + (this->Characters['H'].Bearing.y - ch.Bearing.y) * scale;
